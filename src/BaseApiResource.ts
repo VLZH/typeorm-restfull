@@ -22,58 +22,13 @@ import {
 import { FindOptionsUtils } from "typeorm/find-options/FindOptionsUtils";
 import { JoinAttribute } from "typeorm/query-builder/JoinAttribute";
 import ApiListResponse from "./ApiListResponse";
+import {
+    IApiResourceOptions,
+    IApiResourceOptionsCallbacks
+} from "./ApiResourceOptions";
 
 export type SelectQueryBuilder<Entity> = SQB<Entity>;
 
-export type IPreInsertCallback<Entity> = (
-    ctx: RequestContext,
-    data: { [key: string]: any }
-) => Promise<{ [key: string]: any }>;
-
-export type IAfterInsertCallback<Entity> = (
-    ctx: RequestContext,
-    item: Entity
-) => Promise<Entity>;
-
-export type IPreGetCallback<Entity> = (
-    ctx: RequestContext,
-    qb: SelectQueryBuilder<Entity>
-) => Promise<SelectQueryBuilder<Entity>>;
-
-// Callback options of ApiResource
-export interface IApiResourceOptionsCallbacks<Entity> {
-    afterDelete?: (ctx: RequestContext, deleted_item: DeleteResult) => void;
-    // detail
-    preDetail?: IPreGetCallback<Entity>;
-    afterDetail?: (ctx: RequestContext, item: Entity) => Promise<Entity>;
-    // list
-    preList?: IPreGetCallback<Entity>;
-    afterList?: (ctx: RequestContext, items: Entity[]) => Promise<Entity[]>;
-    // patch
-    prePatch?: IPreInsertCallback<Entity>;
-    afterPatch?: IAfterInsertCallback<Entity>;
-    // post
-    prePost?: IPreInsertCallback<Entity>;
-    afterPost?: IAfterInsertCallback<Entity>;
-}
-
-/**
- * Options of ApiResource
- */
-export interface IApiResourceOptions<T>
-    extends IApiResourceOptionsCallbacks<T> {
-    detail_fields?: string[];
-    filter?: () => void;
-    take?: number;
-    list_fields?: string[];
-    relations?: string[];
-    select?: string[];
-    order?: { [P in keyof T]?: "DESC" | "ASC" };
-}
-
-/**
- *
- */
 export interface IReqBundle {
     ctx: RequestContext;
     rtype: RequestTypes;
@@ -138,12 +93,12 @@ export default class ApiModelResource<Entity> {
     private prePatch: IApiResourceOptionsCallbacks<Entity>["prePatch"];
     private afterPatch: IApiResourceOptionsCallbacks<Entity>["afterPatch"];
     // post
-    private prePost: IApiResourceOptionsCallbacks<Entity>["afterPost"];
+    private prePost: IApiResourceOptionsCallbacks<Entity>["prePost"];
     private afterPost: IApiResourceOptionsCallbacks<Entity>["afterPost"];
     // options
-    private relations: string[];
+    private relations?: string[];
     private take: number;
-    private select: string[];
+    private select?: string[];
     private order: IApiResourceOptions<Entity>["order"];
 
     constructor(
@@ -153,7 +108,19 @@ export default class ApiModelResource<Entity> {
     ) {
         this.model = model;
         this.logger = logger;
-        Object.assign(this, options);
+        this.afterDelete = options.afterDelete;
+        this.preDetail = options.preDetail;
+        this.afterDetail = options.afterDetail;
+        this.preList = options.preList;
+        this.afterList = options.afterList;
+        this.prePatch = options.prePatch;
+        this.afterPatch = options.afterPatch;
+        this.prePost = options.prePost;
+        this.afterPost = options.afterPost;
+        this.relations = options.relations;
+        this.take = options.take || 10;
+        this.select = options.select;
+        this.order = options.order;
     }
 
     public getModel() {
@@ -219,7 +186,7 @@ export default class ApiModelResource<Entity> {
         let item = await qb
             .where(`${qb.alias}.id = :id`, { id: +ctx.params.id })
             .getOne();
-        if (this.afterDetail) {
+        if (this.afterDetail && item) {
             item = await this.afterDetail(ctx, item);
         }
         return {
@@ -497,6 +464,7 @@ export default class ApiModelResource<Entity> {
      * Return undefined if all field are selected
      */
     private buildSelect(b: IReqBundle): Array<keyof Entity> {
+        if (!this.select) return [];
         const keys = b.ctx.query.select
             ? (b.ctx.query.select as string).split(",")
             : this.select.length

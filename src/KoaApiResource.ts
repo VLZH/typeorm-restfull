@@ -1,8 +1,8 @@
 import BaseApiResource, {
     IHandlerResponse,
-    IApiResourceOptions,
     IResourceLogger
 } from "./BaseApiResource";
+import { IApiResourceOptions } from "./ApiResourceOptions";
 import { Context } from "koa";
 import Router, { IMiddleware } from "koa-router";
 
@@ -12,10 +12,10 @@ export default class KoaApiResource<Entity> extends BaseApiResource<Entity> {
         model: new () => Entity,
         options: IApiResourceOptions<Entity>,
         router: any,
-        logger?: IResourceLogger,
+        logger?: IResourceLogger
     ) {
         super(model, options, logger);
-        this.router = router
+        this.router = router;
         this.setupRoutes();
     }
 
@@ -56,6 +56,4 @@ export default class KoaApiResource<Entity> extends BaseApiResource<Entity> {
     }
 }
 
-export {
-    KoaApiResource
-}
+export { KoaApiResource };

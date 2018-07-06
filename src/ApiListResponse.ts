@@ -48,7 +48,7 @@ export default class ApiListResponse<Entity> {
         }
         return {
             limit,
-            next: next_q ? `${endpoint_url}?${next_q}` : null,
+            next: next_q ? `${endpoint_url}?${next_q}` : undefined,
             offset
         };
     }
