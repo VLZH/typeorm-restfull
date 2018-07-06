@@ -11,9 +11,11 @@ export default class KoaApiResource<Entity> extends BaseApiResource<Entity> {
     constructor(
         model: new () => Entity,
         options: IApiResourceOptions<Entity>,
-        logger?: IResourceLogger
+        router: any,
+        logger?: IResourceLogger,
     ) {
         super(model, options, logger);
+        this.router = router
         this.setupRoutes();
     }
 
@@ -52,4 +54,8 @@ export default class KoaApiResource<Entity> extends BaseApiResource<Entity> {
         );
         return get_list_stack ? get_list_stack.path : "";
     }
+}
+
+export {
+    KoaApiResource
 }

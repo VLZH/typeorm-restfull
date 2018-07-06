@@ -12,60 +12,49 @@ import {
     omit,
     pick
 } from "lodash";
-import queryString from "query-string";
 import {
     FindManyOptions,
-    FindOneOptions,
     getConnection,
     Repository,
-    SelectQueryBuilder
+    SelectQueryBuilder as SQB,
+    DeleteResult
 } from "typeorm";
 import { FindOptionsUtils } from "typeorm/find-options/FindOptionsUtils";
 import { JoinAttribute } from "typeorm/query-builder/JoinAttribute";
 import ApiListResponse from "./ApiListResponse";
 
-/**
- *
- */
-export type CallbackFunction<Entity> = (
-    ctx: RequestContext,
-    item: Entity,
-    repository: Repository<Entity>
-) => void | Promise<void>;
+export type SelectQueryBuilder<Entity> = SQB<Entity>;
 
-/**
- *
- */
-export type CallbackFunctionList<Entity> = (
+export type IPreInsertCallback<Entity> = (
     ctx: RequestContext,
-    item: Entity[],
-    repository: Repository<Entity>
-) => void | Promise<Entity[]>;
+    data: { [key: string]: any }
+) => Promise<{ [key: string]: any }>;
 
-/**
- *
- */
-export type CallbackFunctionPreGet<Entity> = (
+export type IAfterInsertCallback<Entity> = (
     ctx: RequestContext,
-    find_options: FindManyOptions<Entity>,
-    repository: Repository<Entity>
-) => FindManyOptions<Entity>;
+    item: Entity
+) => Promise<Entity>;
+
+export type IPreGetCallback<Entity> = (
+    ctx: RequestContext,
+    qb: SelectQueryBuilder<Entity>
+) => Promise<SelectQueryBuilder<Entity>>;
 
 // Callback options of ApiResource
 export interface IApiResourceOptionsCallbacks<Entity> {
-    afterDelete?: CallbackFunction<Entity>;
+    afterDelete?: (ctx: RequestContext, deleted_item: DeleteResult) => void;
     // detail
-    preDetail?: CallbackFunctionPreGet<Entity>;
-    afterDetail?: CallbackFunction<Entity>;
+    preDetail?: IPreGetCallback<Entity>;
+    afterDetail?: (ctx: RequestContext, item: Entity) => Promise<Entity>;
     // list
-    preList?: CallbackFunctionPreGet<Entity>;
-    afterList?: CallbackFunctionList<Entity>;
+    preList?: IPreGetCallback<Entity>;
+    afterList?: (ctx: RequestContext, items: Entity[]) => Promise<Entity[]>;
     // patch
-    prePatch?: CallbackFunction<Entity>;
-    afterPatch?: CallbackFunction<Entity>;
+    prePatch?: IPreInsertCallback<Entity>;
+    afterPatch?: IAfterInsertCallback<Entity>;
     // post
-    prePost?: CallbackFunction<Entity>;
-    afterPost?: CallbackFunction<Entity>;
+    prePost?: IPreInsertCallback<Entity>;
+    afterPost?: IAfterInsertCallback<Entity>;
 }
 
 /**
@@ -187,25 +176,20 @@ export default class ApiModelResource<Entity> {
     public async getList(
         ctx: RequestContext
     ): Promise<IListHandlerResponse<Entity>> {
-        let findOptions = await this.buildFindOptions({
+        const b = {
             ctx,
-            rtype: RequestTypes.isList
-        });
-        findOptions = this.preList
-            ? this.preList(ctx, findOptions, this.getRepo())
-            : findOptions;
+            rtype: RequestTypes.isDetail
+        };
+        let findOptions = await this.buildFindOptions(b);
         let items;
         let total;
-        const qb = this.buildSelectQueryBuilder(
-            {
-                ctx,
-                rtype: RequestTypes.isList
-            },
-            findOptions
-        );
+        let qb = await this.buildSelectQueryBuilder(b, findOptions);
+        if (this.preList) {
+            qb = await this.preList(ctx, qb);
+        }
         [items, total] = await qb.getManyAndCount();
         if (this.afterList) {
-            items = (await this.afterList(ctx, items, this.getRepo())) || items;
+            items = await this.afterList(ctx, items);
         }
         return {
             body: new ApiListResponse(
@@ -223,14 +207,21 @@ export default class ApiModelResource<Entity> {
      * Handler on GET "api/models/:id"
      */
     public async getDetail(ctx: RequestContext): Promise<IHandlerResponse> {
-        let findOptions = await this.buildFindOptions({
+        const b = {
             ctx,
             rtype: RequestTypes.isDetail
-        });
-        findOptions = this.preDetail
-            ? this.preDetail(ctx, findOptions, this.getRepo())
-            : findOptions;
-        const item = await this.getRepo().findOne(+ctx.params.id, findOptions);
+        };
+        let findOptions = await this.buildFindOptions(b);
+        let qb = await this.buildSelectQueryBuilder(b, findOptions);
+        if (this.preDetail) {
+            qb = await this.preDetail(ctx, qb);
+        }
+        let item = await qb
+            .where(`${qb.alias}.id = :id`, { id: +ctx.params.id })
+            .getOne();
+        if (this.afterDetail) {
+            item = await this.afterDetail(ctx, item);
+        }
         return {
             body: this.jsonSerialize(item),
             status: statusCodes.OK
@@ -256,7 +247,7 @@ export default class ApiModelResource<Entity> {
         }
         item = await this.upgradeData(item);
         if (this.prePost) {
-            await this.prePost(ctx, item, this.getRepo());
+            item = await this.prePost(ctx, item);
         }
         try {
             item = await this.getRepo().save(item);
@@ -267,7 +258,7 @@ export default class ApiModelResource<Entity> {
             }
         }
         if (this.afterPost) {
-            await this.afterPost(ctx, item, this.getRepo());
+            item = await this.afterPost(ctx, item);
         }
         return {
             body: this.jsonSerialize(item),
@@ -291,12 +282,12 @@ export default class ApiModelResource<Entity> {
 
         item = await this.upgradeData(item);
         if (this.prePatch) {
-            await this.prePatch(ctx, item, this.getRepo());
+            item = await this.prePatch(ctx, item);
         }
         try {
             const savedItem = await this.getRepo().save(item);
             if (this.afterPatch) {
-                await this.afterPatch(ctx, item, this.getRepo());
+                item = this.afterPatch(ctx, item);
             }
             return {
                 body: this.jsonSerialize(savedItem),
@@ -316,7 +307,10 @@ export default class ApiModelResource<Entity> {
      * Handler on DELETE "api/models/"
      */
     public async deleteDetail(ctx: RequestContext) {
-        await this.getRepo().delete(+ctx.params.id);
+        const deleted = await this.getRepo().delete(+ctx.params.id);
+        if (this.afterDelete) {
+            this.afterDelete(ctx, deleted);
+        }
         return {
             body: "",
             status: statusCodes.NO_CONTENT
@@ -361,16 +355,16 @@ export default class ApiModelResource<Entity> {
     /**
      *
      */
-    private buildSelectQueryBuilder(
+    private async buildSelectQueryBuilder(
         b: IReqBundle,
         fo: FindManyOptions<Entity>
-    ): SelectQueryBuilder<Entity> {
+    ): Promise<SelectQueryBuilder<Entity>> {
         let qb = this.getRepo().createQueryBuilder(this.model.name);
         qb = FindOptionsUtils.applyOptionsToQueryBuilder(qb, fo);
         // qb = this.applyRelations(qb);
-        qb = this.applyWhere(b, qb);
-        qb = this.applySkip(b, qb);
-        qb = this.applyTake(b, qb);
+        qb = await this.applyWhere(b, qb);
+        qb = await this.applySkip(b, qb);
+        qb = await this.applyTake(b, qb);
         return qb;
     }
 
@@ -394,7 +388,7 @@ export default class ApiModelResource<Entity> {
     //     return qb;
     // }
 
-    private applyWhere(b: IReqBundle, qb: SelectQueryBuilder<Entity>) {
+    public async applyWhere(b: IReqBundle, qb: SelectQueryBuilder<Entity>) {
         const repo = this.getRepo();
         for (const skey in b.ctx.query) {
             const val = b.ctx.query[skey];
@@ -436,11 +430,11 @@ export default class ApiModelResource<Entity> {
         return qb;
     }
 
-    private applySkip(b: IReqBundle, qb: SelectQueryBuilder<Entity>) {
+    private async applySkip(b: IReqBundle, qb: SelectQueryBuilder<Entity>) {
         const offset = b.ctx.query.offset ? +b.ctx.query.offset : 0;
         return qb.skip(offset);
     }
-    private applyTake(b: IReqBundle, qb: SelectQueryBuilder<Entity>) {
+    private async applyTake(b: IReqBundle, qb: SelectQueryBuilder<Entity>) {
         const limit = b.ctx.query.limit ? +b.ctx.query.limit : this.take;
         return qb.take(limit);
     }
