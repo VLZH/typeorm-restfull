@@ -1,6 +1,8 @@
 import { Context } from "koa";
 
-export interface IRequestQuery = { [key: string]: string | number };
+export type IRequestQuery = {
+    [key: string]: string;
+};
 export interface IKoaRequesContext extends Context {}
 export type RequestContext = IKoaRequesContext;
 

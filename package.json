@@ -31,9 +31,13 @@
         "tslint": "^5.10.0",
         "tslint-config-prettier": "^1.12.0",
         "tslint-plugin-prettier": "^1.3.0",
-        "typescript": "^2.9.2"
+        "typescript": "^2.9.2",
+        "yarn": "^1.7.0"
     },
     "prettier": {
         "tabWidth": 4
+    },
+    "scripts": {
+        "publish": "tsc && ./node_modules/yarn/bin/yarn publish"
     }
 }
