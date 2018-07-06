@@ -82,8 +82,6 @@ export interface IApiResourceOptions<T>
     order?: { [P in keyof T]?: "DESC" | "ASC" };
 }
 
-type FindOptions<Entity> = FindOneOptions<Entity> | FindManyOptions<Entity>;
-
 /**
  *
  */
