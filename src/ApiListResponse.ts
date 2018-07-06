@@ -1,6 +1,6 @@
-import { SelectQueryBuilder } from "typeorm";
 import queryString from "query-string";
-import { RequestQuery } from "./RequestContext";
+import { SelectQueryBuilder } from "typeorm";
+import { IRequestQuery } from "./RequestContext";
 
 export default class ApiListResponse<Entity> {
     public meta: {
@@ -18,15 +18,15 @@ export default class ApiListResponse<Entity> {
         qb: SelectQueryBuilder<Entity>,
         total: number,
         count: number,
-        request_query: RequestQuery,
+        request_query: IRequestQuery,
         endpoint_url: string
     ) {
         // this.meta.count =
         this.meta = {
+            count,
             limit: 0,
             offset: 0,
             total,
-            count,
             ...this.buildMetaFromQB(qb, request_query, endpoint_url)
         };
         this.objects = objects;
@@ -34,7 +34,7 @@ export default class ApiListResponse<Entity> {
 
     private buildMetaFromQB(
         qb: SelectQueryBuilder<Entity>,
-        query: Object,
+        query: object,
         endpoint_url: string
     ) {
         const offset = qb.expressionMap.skip || 0;

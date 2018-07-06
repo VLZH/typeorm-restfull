@@ -1,5 +1,5 @@
+import { DeleteResult, SelectQueryBuilder } from "typeorm";
 import RequestContext from "./RequestContext";
-import { SelectQueryBuilder, DeleteResult } from "typeorm";
 
 export type IPreInsertCallback<Entity> = (
     ctx: RequestContext,

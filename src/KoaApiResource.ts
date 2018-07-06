@@ -1,17 +1,17 @@
+import { Context } from "koa";
+import Router, { IMiddleware } from "koa-router";
+import { IApiResourceOptions } from "./ApiResourceOptions";
 import BaseApiResource, {
     IHandlerResponse,
     IResourceLogger
 } from "./BaseApiResource";
-import { IApiResourceOptions } from "./ApiResourceOptions";
-import { Context } from "koa";
-import Router, { IMiddleware } from "koa-router";
 
 export default class KoaApiResource<Entity> extends BaseApiResource<Entity> {
-    router: Router;
+    public router: Router;
     constructor(
         model: new () => Entity,
         options: IApiResourceOptions<Entity>,
-        router: any,
+        router: Router,
         logger?: IResourceLogger
     ) {
         super(model, options, logger);

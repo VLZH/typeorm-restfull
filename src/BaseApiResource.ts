@@ -1,6 +1,5 @@
 import { validate } from "class-validator";
 import statusCodes from "http-status-codes";
-import RequestContext from "./RequestContext";
 import {
     has,
     isArray,
@@ -13,11 +12,11 @@ import {
     pick
 } from "lodash";
 import {
+    DeleteResult,
     FindManyOptions,
     getConnection,
     Repository,
-    SelectQueryBuilder as SQB,
-    DeleteResult
+    SelectQueryBuilder as SQB
 } from "typeorm";
 import { FindOptionsUtils } from "typeorm/find-options/FindOptionsUtils";
 import { JoinAttribute } from "typeorm/query-builder/JoinAttribute";
@@ -26,6 +25,7 @@ import {
     IApiResourceOptions,
     IApiResourceOptionsCallbacks
 } from "./ApiResourceOptions";
+import RequestContext from "./RequestContext";
 
 export type SelectQueryBuilder<Entity> = SQB<Entity>;
 
@@ -127,10 +127,6 @@ export default class ApiModelResource<Entity> {
         return this.model;
     }
 
-    private getRepo(): Repository<Entity> {
-        return getConnection().getRepository(this.model);
-    }
-
     /**
      * ======================================
      * HANDLERS AND ADDINT THEM TO THE ROUTER
@@ -147,7 +143,7 @@ export default class ApiModelResource<Entity> {
             ctx,
             rtype: RequestTypes.isDetail
         };
-        let findOptions = await this.buildFindOptions(b);
+        const findOptions = await this.buildFindOptions(b);
         let items;
         let total;
         let qb = await this.buildSelectQueryBuilder(b, findOptions);
@@ -178,7 +174,7 @@ export default class ApiModelResource<Entity> {
             ctx,
             rtype: RequestTypes.isDetail
         };
-        let findOptions = await this.buildFindOptions(b);
+        const findOptions = await this.buildFindOptions(b);
         let qb = await this.buildSelectQueryBuilder(b, findOptions);
         if (this.preDetail) {
             qb = await this.preDetail(ctx, qb);
@@ -345,6 +341,10 @@ export default class ApiModelResource<Entity> {
         };
     }
 
+    private getRepo(): Repository<Entity> {
+        return getConnection().getRepository(this.model);
+    }
+
     // TODO: Recursive applying
     // private applyRelations(qb: SelectQueryBuilder<Entity>) {
     //     this.relations.map(r => {
@@ -354,7 +354,8 @@ export default class ApiModelResource<Entity> {
     //     });
     //     return qb;
     // }
-
+    
+    /* tslint:disable */
     public async applyWhere(b: IReqBundle, qb: SelectQueryBuilder<Entity>) {
         const repo = this.getRepo();
         for (const skey in b.ctx.query) {
@@ -396,6 +397,7 @@ export default class ApiModelResource<Entity> {
         }
         return qb;
     }
+    /* tslint:enable */
 
     private async applySkip(b: IReqBundle, qb: SelectQueryBuilder<Entity>) {
         const offset = b.ctx.query.offset ? +b.ctx.query.offset : 0;
@@ -464,7 +466,7 @@ export default class ApiModelResource<Entity> {
      * Return undefined if all field are selected
      */
     private buildSelect(b: IReqBundle): Array<keyof Entity> {
-        if (!this.select) return [];
+        if (!this.select) { return []; }
         const keys = b.ctx.query.select
             ? (b.ctx.query.select as string).split(",")
             : this.select.length
