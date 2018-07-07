@@ -354,7 +354,6 @@ export default class ApiModelResource<Entity> {
 
     /* tslint:disable */
     public async applyWhere(b: IReqBundle, qb: SelectQueryBuilder<Entity>) {
-        const repo = this.getRepo();
         for (const skey in b.ctx.query) {
             const val = b.ctx.query[skey];
             const key = this.prepareQueryKey(skey, val);
@@ -388,8 +387,6 @@ export default class ApiModelResource<Entity> {
                         [key.base]: val
                     }
                 );
-            } else {
-                console.log("is not property", key);
             }
         }
         return qb;
