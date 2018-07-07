@@ -21,26 +21,26 @@ export default class ApiListResponse<Entity> {
         request_query: IRequestQuery,
         endpoint_url: string
     ) {
-        // this.meta.count =
         this.meta = {
             count,
             limit: 0,
             offset: 0,
             total,
-            ...this.buildMetaFromQB(qb, request_query, endpoint_url)
+            ...this.buildMetaFromQB(qb, total, request_query, endpoint_url)
         };
         this.objects = objects;
     }
 
     private buildMetaFromQB(
         qb: SelectQueryBuilder<Entity>,
+        total: number,
         query: object,
         endpoint_url: string
     ) {
         const offset = qb.expressionMap.skip || 0;
         const limit = qb.expressionMap.take || 0;
         let next_q;
-        if (this.meta.total > offset + (limit || 0)) {
+        if (total > offset + (limit || 0)) {
             next_q = queryString.stringify({
                 ...query,
                 offset: offset + limit

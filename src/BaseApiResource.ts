@@ -119,7 +119,7 @@ export default class ApiModelResource<Entity> {
         this.afterPost = options.afterPost;
         this.relations = options.relations;
         this.take = options.take || 10;
-        this.select = options.select;
+        this.select = options.select || undefined;
         this.order = options.order;
     }
 
@@ -315,9 +315,6 @@ export default class ApiModelResource<Entity> {
      * ===========================
      */
 
-    /**
-     *
-     */
     private async buildSelectQueryBuilder(
         b: IReqBundle,
         fo: FindManyOptions<Entity>
@@ -354,7 +351,7 @@ export default class ApiModelResource<Entity> {
     //     });
     //     return qb;
     // }
-    
+
     /* tslint:disable */
     public async applyWhere(b: IReqBundle, qb: SelectQueryBuilder<Entity>) {
         const repo = this.getRepo();
@@ -465,8 +462,10 @@ export default class ApiModelResource<Entity> {
     /**
      * Return undefined if all field are selected
      */
-    private buildSelect(b: IReqBundle): Array<keyof Entity> {
-        if (!this.select) { return []; }
+    private buildSelect(b: IReqBundle): Array<keyof Entity> | undefined {
+        if (!this.select) {
+            return;
+        }
         const keys = b.ctx.query.select
             ? (b.ctx.query.select as string).split(",")
             : this.select.length

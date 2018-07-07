@@ -2,7 +2,6 @@
     "name": "typeorm-restfull",
     "version": "0.0.4",
     "description": "Adding restfull to your typeorm models",
-    "main": "index.ts",
     "repository": "https://github.com/VLZH/typeorm-restfull",
     "author": "VLZH",
     "license": "MIT",
