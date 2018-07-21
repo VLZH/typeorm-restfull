@@ -123,6 +123,17 @@ export default class ApiModelResource<Entity> {
         this.order = options.order;
     }
 
+    public reverseEndpointUrl() {
+        const error_message =
+            "Please. Declare correct reverseEndpointUrl method";
+        if (this.logger) {
+            this.logger.error(error_message);
+        } else {
+            console.error(error_message);
+        }
+        return "";
+    }
+
     public getModel() {
         return this.model;
     }
@@ -161,7 +172,7 @@ export default class ApiModelResource<Entity> {
                 total,
                 items.length,
                 ctx.query,
-                "http://localhost/"
+                this.reverseEndpointUrl()
             ),
             status: statusCodes.OK
         };

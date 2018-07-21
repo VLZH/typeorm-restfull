@@ -6,16 +6,23 @@ import BaseApiResource, {
     IResourceLogger
 } from "./BaseApiResource";
 
+export interface IKoaApiResourceOptions<Entity>
+    extends IApiResourceOptions<Entity> {
+    base_url?: string;
+}
+
 export default class KoaApiResource<Entity> extends BaseApiResource<Entity> {
     public router: Router;
+    public base_url?: string;
     constructor(
         model: new () => Entity,
-        options: IApiResourceOptions<Entity>,
+        options: IKoaApiResourceOptions<Entity>,
         router: Router,
         logger?: IResourceLogger
     ) {
         super(model, options, logger);
         this.router = router;
+        this.base_url = options.base_url;
         this.setupRoutes();
     }
 
@@ -48,11 +55,12 @@ export default class KoaApiResource<Entity> extends BaseApiResource<Entity> {
             .delete("/:id", wh(this.deleteDetail));
     }
 
-    private reverseEndpointUrl(): string {
+    public reverseEndpointUrl(): string {
         const get_list_stack = this.router.stack.find(
             s => s.paramNames.length === 0 && s.methods.includes("GET")
         );
-        return get_list_stack ? get_list_stack.path : "";
+        const path = get_list_stack ? get_list_stack.path : "";
+        return `${this.base_url || ""}${path}`;
     }
 }
 
