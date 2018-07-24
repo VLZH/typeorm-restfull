@@ -1,6 +1,7 @@
 import { Context } from "koa";
 import Router, { IMiddleware } from "koa-router";
 import { IApiResourceOptions } from "./ApiResourceOptions";
+import RequestContext from "./RequestContext";
 import BaseApiResource, {
     IHandlerResponse,
     IResourceLogger
@@ -34,11 +35,21 @@ export default class KoaApiResource<Entity> extends BaseApiResource<Entity> {
      * Wrap a handler for flexibylity
      */
     private wrapHandler(
-        handler: (ctx: Context) => Promise<IHandlerResponse>
+        handler: (ctx: RequestContext) => Promise<IHandlerResponse>
     ): (ctx: Context, next: () => void) => Promise<void> {
         handler = handler.bind(this);
         return async (ctx: Context, next: () => void) => {
-            const handlerResult = await handler(ctx);
+            const r_ctx = new RequestContext(
+                {
+                    body: ctx.request.body,
+                    headers: ctx.headers,
+                    params: ctx.params,
+                    path: ctx.path,
+                    query: ctx.query
+                },
+                ctx
+            );
+            const handlerResult = await handler(r_ctx);
             ctx.body = handlerResult.body;
             ctx.status = handlerResult.status;
             next();
@@ -46,13 +57,12 @@ export default class KoaApiResource<Entity> extends BaseApiResource<Entity> {
     }
 
     private setupRoutes(): void {
-        const wh = this.wrapHandler.bind(this);
         this.router
-            .get("/", wh(this.getList))
-            .get("/:id", wh(this.getDetail))
-            .post("/", wh(this.postDetail))
-            .patch("/:id", wh(this.patchDetail))
-            .delete("/:id", wh(this.deleteDetail));
+            .get("/", this.wrapHandler(this.getList))
+            .get("/:id", this.wrapHandler(this.getDetail))
+            .post("/", this.wrapHandler(this.postDetail))
+            .patch("/:id", this.wrapHandler(this.patchDetail))
+            .delete("/:id", this.wrapHandler(this.deleteDetail));
     }
 
     public reverseEndpointUrl(): string {
