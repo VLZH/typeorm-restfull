@@ -5,7 +5,12 @@
     "repository": "https://github.com/VLZH/typeorm-restfull",
     "author": "VLZH",
     "license": "MIT",
-    "keywords": ["typeorm", "api", "rest", "koa"],
+    "keywords": [
+        "typeorm",
+        "api",
+        "rest",
+        "koa"
+    ],
     "dependencies": {
         "class-validator": "^0.8.5",
         "http-status-codes": "^1.3.0",
