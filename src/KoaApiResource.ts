@@ -7,14 +7,19 @@ import BaseApiResource, {
     IResourceLogger
 } from "./BaseApiResource";
 
+type IBodyExtractor = (ctx: Context) => object | string | Array<any>;
+
 export interface IKoaApiResourceOptions<Entity>
     extends IApiResourceOptions<Entity> {
     base_url?: string;
+    bodyExtractor: IBodyExtractor;
 }
 
 export default class KoaApiResource<Entity> extends BaseApiResource<Entity> {
     public router: Router;
     public base_url?: string;
+    public bodyExtractor: IBodyExtractor;
+
     constructor(
         model: new () => Entity,
         options: IKoaApiResourceOptions<Entity>,
@@ -24,6 +29,7 @@ export default class KoaApiResource<Entity> extends BaseApiResource<Entity> {
         super(model, options, logger);
         this.router = router;
         this.base_url = options.base_url;
+        this.bodyExtractor = options.bodyExtractor;
         this.setupRoutes();
     }
 
@@ -41,7 +47,7 @@ export default class KoaApiResource<Entity> extends BaseApiResource<Entity> {
         return async (ctx: Context, next: () => void) => {
             const r_ctx = new RequestContext(
                 {
-                    body: ctx.request.body,
+                    body: this.bodyExtractor(ctx),
                     headers: ctx.headers,
                     params: ctx.params,
                     path: ctx.path,
