@@ -12,7 +12,6 @@ import {
     pick
 } from "lodash";
 import {
-    DeleteResult,
     FindManyOptions,
     getConnection,
     Repository,

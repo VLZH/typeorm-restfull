@@ -1,6 +1,6 @@
 import queryString from "query-string";
 import { SelectQueryBuilder } from "typeorm";
-import { IRequestQuery } from "./RequestContext";
+import { RequestQuery } from "./RequestContext";
 
 export default class ApiListResponse<Entity> {
     public meta: {
@@ -18,7 +18,7 @@ export default class ApiListResponse<Entity> {
         qb: SelectQueryBuilder<Entity>,
         total: number,
         count: number,
-        request_query: IRequestQuery,
+        request_query: RequestQuery,
         endpoint_url: string
     ) {
         this.meta = {

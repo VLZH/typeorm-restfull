@@ -1,3 +1,7 @@
+export type RequestQuery = {
+    [key: string]: any;
+};
+
 export class RequestContext {
     public body?: object | string;
     public path: string;
@@ -8,10 +12,7 @@ export class RequestContext {
         // headers
         [key: string]: any;
     };
-    public query: {
-        // Get params
-        [key: string]: any;
-    };
+    public query: RequestQuery;
     public original_context?: any;
 
     constructor(data: RequestContext, original_context: any) {
