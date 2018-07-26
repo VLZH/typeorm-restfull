@@ -41,7 +41,7 @@ export interface IHandlerResponse {
     status: number;
 }
 
-interface IListHandlerResponse<Entity> extends IHandlerResponse {
+export interface IListHandlerResponse<Entity> extends IHandlerResponse {
     body: ApiListResponse<Entity>;
 }
 
@@ -65,7 +65,7 @@ interface IQueryKey {
     value: string | string[] | boolean | number;
 }
 
-enum RequestTypes {
+export enum RequestTypes {
     isDetail,
     isList,
     isPost,

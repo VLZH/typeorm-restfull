@@ -7,7 +7,7 @@ import BaseApiResource, {
     IResourceLogger
 } from "./BaseApiResource";
 
-type IBodyExtractor = (ctx: Context) => object | string | Array<any>;
+export type IBodyExtractor = (ctx: Context) => object | string | Array<any>;
 
 export interface IKoaApiResourceOptions<Entity>
     extends IApiResourceOptions<Entity> {

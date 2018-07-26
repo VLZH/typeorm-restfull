@@ -37,6 +37,6 @@
         "tabWidth": 4
     },
     "scripts": {
-        "pub": "tsc && ./node_modules/yarn/bin/yarn publish"
+        "pub": "tsc --declaration && ./node_modules/yarn/bin/yarn publish"
     }
 }
