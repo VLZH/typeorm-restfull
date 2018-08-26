@@ -1,5 +1,5 @@
 import { DeleteResult, SelectQueryBuilder } from "typeorm";
-import RequestContext from "./RequestContext";
+import RequestContext, { ApiRequestType } from "./RequestContext";
 
 export type IPreInsertCallback<Entity> = (
     ctx: RequestContext,
@@ -16,6 +16,8 @@ export type IPreGetCallback<Entity> = (
     qb: SelectQueryBuilder<Entity>
 ) => Promise<SelectQueryBuilder<Entity>>;
 
+export type IAccessCallback<Entity> = (ctx: RequestContext) => boolean;
+
 // Callback options of ApiResource
 export interface IApiResourceOptionsCallbacks<Entity> {
     afterDelete?: (ctx: RequestContext, deleted_item: DeleteResult) => void;
@@ -31,6 +33,8 @@ export interface IApiResourceOptionsCallbacks<Entity> {
     // post
     prePost?: IPreInsertCallback<Entity>;
     afterPost?: IAfterInsertCallback<Entity>;
+    // access
+    hasAccess?: IAccessCallback<Entity>;
 }
 
 /**

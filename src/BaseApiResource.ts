@@ -22,16 +22,12 @@ import { JoinAttribute } from "typeorm/query-builder/JoinAttribute";
 import ApiListResponse from "./ApiListResponse";
 import {
     IApiResourceOptions,
-    IApiResourceOptionsCallbacks
+    IApiResourceOptionsCallbacks,
+    IAccessCallback
 } from "./ApiResourceOptions";
 import RequestContext from "./RequestContext";
 
 export type SelectQueryBuilder<Entity> = SQB<Entity>;
-
-export interface IReqBundle {
-    ctx: RequestContext;
-    rtype: RequestTypes;
-}
 
 /**
  * Interface of response from request handler
@@ -39,10 +35,11 @@ export interface IReqBundle {
 export interface IHandlerResponse {
     body?: string | object | any[];
     status: number;
+    error?: Error;
 }
 
 export interface IListHandlerResponse<Entity> extends IHandlerResponse {
-    body: ApiListResponse<Entity>;
+    body: ApiListResponse<Entity> | string;
 }
 
 export interface IResourceLogger {
@@ -65,19 +62,11 @@ interface IQueryKey {
     value: string | string[] | boolean | number;
 }
 
-export enum RequestTypes {
-    isDetail,
-    isList,
-    isPost,
-    isDelete,
-    isPatch
-}
-
 /**
  * Class for creating handler for some model
  * TODO: Разобраться с типами модели...
  */
-export default class ApiModelResource<Entity> {
+export default class BaseApiResource<Entity> {
     private model: new () => Entity;
     private logger?: IResourceLogger;
     // callbacks
@@ -94,6 +83,8 @@ export default class ApiModelResource<Entity> {
     // post
     private prePost: IApiResourceOptionsCallbacks<Entity>["prePost"];
     private afterPost: IApiResourceOptionsCallbacks<Entity>["afterPost"];
+    // access
+    private hasAccess: IAccessCallback<Entity>;
     // options
     private relations?: string[];
     private take: number;
@@ -107,6 +98,7 @@ export default class ApiModelResource<Entity> {
     ) {
         this.model = model;
         this.logger = logger;
+        // callbacks
         this.afterDelete = options.afterDelete;
         this.preDetail = options.preDetail;
         this.afterDetail = options.afterDetail;
@@ -116,6 +108,8 @@ export default class ApiModelResource<Entity> {
         this.afterPatch = options.afterPatch;
         this.prePost = options.prePost;
         this.afterPost = options.afterPost;
+        this.hasAccess = options.hasAccess || (() => true);
+        //
         this.relations = options.relations;
         this.take = options.take || 10;
         this.select = options.select || undefined;
@@ -149,14 +143,16 @@ export default class ApiModelResource<Entity> {
     public async getList(
         ctx: RequestContext
     ): Promise<IListHandlerResponse<Entity>> {
-        const b = {
-            ctx,
-            rtype: RequestTypes.isDetail
-        };
-        const findOptions = await this.buildFindOptions(b);
+        if (!this.hasAccess(ctx)) {
+            return {
+                status: statusCodes.UNAUTHORIZED,
+                body: "Cannot access"
+            };
+        }
+        const findOptions = await this.buildFindOptions(ctx);
         let items;
         let total;
-        let qb = await this.buildSelectQueryBuilder(b, findOptions);
+        let qb = await this.buildSelectQueryBuilder(ctx, findOptions);
         if (this.preList) {
             qb = await this.preList(ctx, qb);
         }
@@ -180,12 +176,14 @@ export default class ApiModelResource<Entity> {
      * Handler on GET "api/models/:id"
      */
     public async getDetail(ctx: RequestContext): Promise<IHandlerResponse> {
-        const b = {
-            ctx,
-            rtype: RequestTypes.isDetail
-        };
-        const findOptions = await this.buildFindOptions(b);
-        let qb = await this.buildSelectQueryBuilder(b, findOptions);
+        if (!this.hasAccess(ctx)) {
+            return {
+                status: statusCodes.UNAUTHORIZED,
+                body: "Cannot access"
+            };
+        }
+        const findOptions = await this.buildFindOptions(ctx);
+        let qb = await this.buildSelectQueryBuilder(ctx, findOptions);
         if (this.preDetail) {
             qb = await this.preDetail(ctx, qb);
         }
@@ -204,6 +202,12 @@ export default class ApiModelResource<Entity> {
      * Handler on POST "api/models/"
      */
     public async postDetail(ctx: RequestContext) {
+        if (!this.hasAccess(ctx)) {
+            return {
+                status: statusCodes.UNAUTHORIZED,
+                body: "Cannot access"
+            };
+        }
         let item = new (this.model as any)(ctx.body);
         const errors = await validate(item);
         if (errors.length) {
@@ -227,8 +231,8 @@ export default class ApiModelResource<Entity> {
         } catch (error) {
             if (this.logger) {
                 this.logger.error(error);
-                throw new Error("Error in creating new ");
             }
+            throw new Error("Error in creating new ");
         }
         if (this.afterPost) {
             item = await this.afterPost(ctx, item);
@@ -242,6 +246,12 @@ export default class ApiModelResource<Entity> {
      * Handler on PATCH "api/models/:id/"
      */
     public async patchDetail(ctx: RequestContext) {
+        if (!this.hasAccess(ctx)) {
+            return {
+                status: statusCodes.UNAUTHORIZED,
+                body: "Cannot access"
+            };
+        }
         let item: any = await this.getRepo().findOne(+ctx.params.id);
         if (!item) {
             return {
@@ -280,6 +290,12 @@ export default class ApiModelResource<Entity> {
      * Handler on DELETE "api/models/"
      */
     public async deleteDetail(ctx: RequestContext) {
+        if (!this.hasAccess(ctx)) {
+            return {
+                status: statusCodes.UNAUTHORIZED,
+                body: "Cannot access"
+            };
+        }
         const deleted = await this.getRepo().delete(+ctx.params.id);
         if (this.afterDelete) {
             this.afterDelete(ctx, deleted);
@@ -326,15 +342,15 @@ export default class ApiModelResource<Entity> {
      */
 
     private async buildSelectQueryBuilder(
-        b: IReqBundle,
+        ctx: RequestContext,
         fo: FindManyOptions<Entity>
     ): Promise<SelectQueryBuilder<Entity>> {
         let qb = this.getRepo().createQueryBuilder(this.model.name);
         qb = FindOptionsUtils.applyOptionsToQueryBuilder(qb, fo);
         // qb = this.applyRelations(qb);
-        qb = await this.applyWhere(b, qb);
-        qb = await this.applySkip(b, qb);
-        qb = await this.applyTake(b, qb);
+        qb = await this.applyWhere(ctx, qb);
+        qb = await this.applySkip(ctx, qb);
+        qb = await this.applyTake(ctx, qb);
         return qb;
     }
 
@@ -363,9 +379,12 @@ export default class ApiModelResource<Entity> {
     // }
 
     /* tslint:disable */
-    public async applyWhere(b: IReqBundle, qb: SelectQueryBuilder<Entity>) {
-        for (const skey in b.ctx.query) {
-            const val = b.ctx.query[skey];
+    public async applyWhere(
+        ctx: RequestContext,
+        qb: SelectQueryBuilder<Entity>
+    ) {
+        for (const skey in ctx.query) {
+            const val = ctx.query[skey];
             const key = this.prepareQueryKey(skey, val);
             if (this.isField(key)) {
                 // For relation
@@ -403,12 +422,18 @@ export default class ApiModelResource<Entity> {
     }
     /* tslint:enable */
 
-    private async applySkip(b: IReqBundle, qb: SelectQueryBuilder<Entity>) {
-        const offset = b.ctx.query.offset ? +b.ctx.query.offset : 0;
+    private async applySkip(
+        ctx: RequestContext,
+        qb: SelectQueryBuilder<Entity>
+    ) {
+        const offset = ctx.query.offset ? +ctx.query.offset : 0;
         return qb.skip(offset);
     }
-    private async applyTake(b: IReqBundle, qb: SelectQueryBuilder<Entity>) {
-        const limit = b.ctx.query.limit ? +b.ctx.query.limit : this.take;
+    private async applyTake(
+        ctx: RequestContext,
+        qb: SelectQueryBuilder<Entity>
+    ) {
+        const limit = ctx.query.limit ? +ctx.query.limit : this.take;
         return qb.take(limit);
     }
 
@@ -435,19 +460,21 @@ export default class ApiModelResource<Entity> {
 
     // Parse request options
     private async buildFindOptions(
-        b: IReqBundle
+        ctx: RequestContext
     ): Promise<FindManyOptions<Entity>> {
         return {
-            order: this.buildOrder(b),
-            relations: this.buildRelations(b),
-            select: this.buildSelect(b)
+            order: this.buildOrder(ctx),
+            relations: this.buildRelations(ctx),
+            select: this.buildSelect(ctx)
         };
     }
 
-    private buildOrder(b: IReqBundle): IApiResourceOptions<Entity>["order"] {
+    private buildOrder(
+        ctx: RequestContext
+    ): IApiResourceOptions<Entity>["order"] {
         // Multi value ordering
-        const ordered = !!b.ctx.query.order_by;
-        const order_by: string = b.ctx.query.order_by as string;
+        const ordered = !!ctx.query.order_by;
+        const order_by: string = ctx.query.order_by as string;
         if (!ordered) {
             return this.order;
         }
@@ -469,18 +496,18 @@ export default class ApiModelResource<Entity> {
     /**
      * Return undefined if all field are selected
      */
-    private buildSelect(b: IReqBundle): Array<keyof Entity> | undefined {
+    private buildSelect(ctx: RequestContext): Array<keyof Entity> | undefined {
         if (!this.select) {
             return;
         }
-        const keys = b.ctx.query.select
-            ? (b.ctx.query.select as string).split(",")
+        const keys = ctx.query.select
+            ? (ctx.query.select as string).split(",")
             : this.select.length
                 ? this.select
                 : undefined;
         return keys as Array<keyof Entity>;
     }
-    private buildRelations(b: IReqBundle): string[] {
+    private buildRelations(ctx: RequestContext): string[] {
         return this.relations || [];
     }
 

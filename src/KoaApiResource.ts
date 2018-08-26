@@ -1,7 +1,7 @@
 import { Context } from "koa";
 import Router, { IMiddleware } from "koa-router";
 import { IApiResourceOptions } from "./ApiResourceOptions";
-import RequestContext from "./RequestContext";
+import RequestContext, { ApiRequestType } from "./RequestContext";
 import BaseApiResource, {
     IHandlerResponse,
     IResourceLogger
@@ -41,7 +41,8 @@ export default class KoaApiResource<Entity> extends BaseApiResource<Entity> {
      * Wrap a handler for flexibylity
      */
     private wrapHandler(
-        handler: (ctx: RequestContext) => Promise<IHandlerResponse>
+        handler: (ctx: RequestContext) => Promise<IHandlerResponse>,
+        request_type: ApiRequestType
     ): (ctx: Context, next: () => void) => Promise<void> {
         handler = handler.bind(this);
         return async (ctx: Context, next: () => void) => {
@@ -51,7 +52,8 @@ export default class KoaApiResource<Entity> extends BaseApiResource<Entity> {
                     headers: ctx.headers,
                     params: ctx.params,
                     path: ctx.path,
-                    query: ctx.query
+                    query: ctx.query,
+                    request_type
                 },
                 ctx
             );
@@ -64,11 +66,14 @@ export default class KoaApiResource<Entity> extends BaseApiResource<Entity> {
 
     private setupRoutes(): void {
         this.router
-            .get("/", this.wrapHandler(this.getList))
-            .get("/:id", this.wrapHandler(this.getDetail))
-            .post("/", this.wrapHandler(this.postDetail))
-            .patch("/:id", this.wrapHandler(this.patchDetail))
-            .delete("/:id", this.wrapHandler(this.deleteDetail));
+            .get("/", this.wrapHandler(this.getList, "LIST"))
+            .get("/:id", this.wrapHandler(this.getDetail, "DETAIL"))
+            .post("/", this.wrapHandler(this.postDetail, "POST_DETAIL"))
+            .patch("/:id", this.wrapHandler(this.patchDetail, "PATCH_DETAIL"))
+            .delete(
+                "/:id",
+                this.wrapHandler(this.deleteDetail, "DELETE_DETAIL")
+            );
     }
 
     public reverseEndpointUrl(): string {

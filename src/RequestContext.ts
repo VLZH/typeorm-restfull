@@ -1,3 +1,10 @@
+export type ApiRequestType =
+    | "DETAIL"
+    | "LIST"
+    | "PATCH_DETAIL"
+    | "POST_DETAIL"
+    | "DELETE_DETAIL";
+
 export type RequestQuery = {
     [key: string]: any;
 };
@@ -13,6 +20,7 @@ export class RequestContext {
         [key: string]: any;
     };
     public query: RequestQuery;
+    public request_type: ApiRequestType;
     public original_context?: any;
 
     constructor(data: RequestContext, original_context: any) {
@@ -21,6 +29,7 @@ export class RequestContext {
         this.params = data.params;
         this.headers = data.headers;
         this.query = data.query;
+        this.request_type = data.request_type;
         this.original_context = original_context;
     }
 }
