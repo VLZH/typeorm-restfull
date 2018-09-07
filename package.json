@@ -1,6 +1,6 @@
 {
     "name": "typeorm-restfull",
-    "version": "0.0.13",
+    "version": "0.0.14",
     "description": "Adding restfull to your typeorm models",
     "repository": "https://github.com/VLZH/typeorm-restfull",
     "author": "VLZH",
