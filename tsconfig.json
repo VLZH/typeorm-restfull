@@ -11,10 +11,9 @@
         "esModuleInterop": true,
         "experimentalDecorators": true,
         "emitDecoratorMetadata": true,
+        "baseUrl": "./src"
     },
-    "files": [
-        "index.ts"
-    ],
+    "files": ["index.ts"],
     "include": ["./src/**/*.ts"],
     "exclude": ["node_modules", "./src/**/__tests__"]
 }

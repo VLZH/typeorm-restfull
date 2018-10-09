@@ -6,6 +6,7 @@ import BaseApiResource, {
     IHandlerResponse,
     IResourceLogger
 } from "./BaseApiResource";
+import { ObjectType } from "typeorm";
 
 export type IBodyExtractor = (ctx: Context) => object | string | Array<any>;
 
@@ -21,7 +22,7 @@ export default class KoaApiResource<Entity> extends BaseApiResource<Entity> {
     public bodyExtractor: IBodyExtractor;
 
     constructor(
-        model: new () => Entity,
+        model: ObjectType<Entity>,
         options: IKoaApiResourceOptions<Entity>,
         router: Router,
         logger?: IResourceLogger

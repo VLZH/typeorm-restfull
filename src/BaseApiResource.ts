@@ -15,7 +15,8 @@ import {
     FindManyOptions,
     getConnection,
     Repository,
-    SelectQueryBuilder as SQB
+    SelectQueryBuilder as SQB,
+    ObjectType
 } from "typeorm";
 import { FindOptionsUtils } from "typeorm/find-options/FindOptionsUtils";
 import { JoinAttribute } from "typeorm/query-builder/JoinAttribute";
@@ -67,7 +68,7 @@ interface IQueryKey {
  * TODO: Разобраться с типами модели...
  */
 export default class BaseApiResource<Entity> {
-    private model: new () => Entity;
+    private model: ObjectType<Entity>;
     private logger?: IResourceLogger;
     // callbacks
     private afterDelete: IApiResourceOptionsCallbacks<Entity>["afterDelete"];
@@ -92,7 +93,7 @@ export default class BaseApiResource<Entity> {
     private order: IApiResourceOptions<Entity>["order"];
 
     constructor(
-        model: new () => Entity,
+        model: ObjectType<Entity>,
         options: IApiResourceOptions<Entity>,
         logger?: IResourceLogger
     ) {
@@ -482,7 +483,7 @@ export default class BaseApiResource<Entity> {
             order_by[0] === "-"
                 ? ["DESC", order_by.slice(1)]
                 : ["ASC", order_by];
-        if (!has(new this.model(), key)) {
+        if (!has(new (this.model as any)(), key)) {
             return {};
         }
 
