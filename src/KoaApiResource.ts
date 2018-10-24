@@ -38,6 +38,14 @@ export default class KoaApiResource<Entity> extends BaseApiResource<Entity> {
         return this.router.routes();
     }
 
+    public reverseEndpointUrl(): string {
+        const get_list_stack = this.router.stack.find(
+            s => s.paramNames.length === 0 && s.methods.includes("GET")
+        );
+        const path = get_list_stack ? get_list_stack.path : "";
+        return `${this.base_url || ""}${path}`;
+    }
+
     /**
      * Wrap a handler for flexibylity
      */
@@ -75,14 +83,6 @@ export default class KoaApiResource<Entity> extends BaseApiResource<Entity> {
                 "/:id",
                 this.wrapHandler(this.deleteDetail, "DELETE_DETAIL")
             );
-    }
-
-    public reverseEndpointUrl(): string {
-        const get_list_stack = this.router.stack.find(
-            s => s.paramNames.length === 0 && s.methods.includes("GET")
-        );
-        const path = get_list_stack ? get_list_stack.path : "";
-        return `${this.base_url || ""}${path}`;
     }
 }
 

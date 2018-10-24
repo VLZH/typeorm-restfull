@@ -14,18 +14,30 @@ import {
 import {
     FindManyOptions,
     getConnection,
+    ObjectType,
     Repository,
-    SelectQueryBuilder as SQB,
-    ObjectType
+    SelectQueryBuilder as SQB
 } from "typeorm";
 import { FindOptionsUtils } from "typeorm/find-options/FindOptionsUtils";
 import { JoinAttribute } from "typeorm/query-builder/JoinAttribute";
+import { PlainObjectToNewEntityTransformer } from "typeorm/query-builder/transformer/PlainObjectToNewEntityTransformer";
 import ApiListResponse from "./ApiListResponse";
 import {
+    IAccessCallback,
     IApiResourceOptions,
-    IApiResourceOptionsCallbacks,
-    IAccessCallback
+    IApiResourceOptionsCallbacks
 } from "./ApiResourceOptions";
+import {
+    InvalidQueryKey,
+    NotFoundError,
+    UnauthorizedError
+} from "./exceptions";
+import {
+    IQueryKey,
+    QueryKeyModificator,
+    QueryKeyModificatorsList,
+    SpecialQueryKeys
+} from "./IQueryKey";
 import RequestContext from "./RequestContext";
 
 export type SelectQueryBuilder<Entity> = SQB<Entity>;
@@ -48,19 +60,6 @@ export interface IResourceLogger {
     info: (text: any) => void;
     warn: (text: any) => void;
     error: (text: any) => void;
-}
-
-// Filter query key
-type QueryKeyModification = "gt" | "gte" | "lt" | "lte" | "in";
-const QueryKeyModifications = ["gt", "gte", "lt", "lte", "in"];
-/**
- *
- */
-interface IQueryKey {
-    base: string;
-    path: string[];
-    modification?: QueryKeyModification;
-    value: string | string[] | boolean | number;
 }
 
 /**
@@ -91,6 +90,8 @@ export default class BaseApiResource<Entity> {
     private take: number;
     private select?: string[];
     private order: IApiResourceOptions<Entity>["order"];
+    //
+    private plainTransformer: PlainObjectToNewEntityTransformer;
 
     constructor(
         model: ObjectType<Entity>,
@@ -115,6 +116,8 @@ export default class BaseApiResource<Entity> {
         this.take = options.take || 10;
         this.select = options.select || undefined;
         this.order = options.order;
+        //
+        this.plainTransformer = new PlainObjectToNewEntityTransformer();
     }
 
     public reverseEndpointUrl() {
@@ -145,15 +148,11 @@ export default class BaseApiResource<Entity> {
         ctx: RequestContext
     ): Promise<IListHandlerResponse<Entity>> {
         if (!this.hasAccess(ctx)) {
-            return {
-                status: statusCodes.UNAUTHORIZED,
-                body: "Cannot access"
-            };
+            throw new UnauthorizedError();
         }
-        const findOptions = await this.buildFindOptions(ctx);
         let items;
         let total;
-        let qb = await this.buildSelectQueryBuilder(ctx, findOptions);
+        let qb = await this.buildSelectQueryBuilder(ctx);
         if (this.preList) {
             qb = await this.preList(ctx, qb);
         }
@@ -178,13 +177,9 @@ export default class BaseApiResource<Entity> {
      */
     public async getDetail(ctx: RequestContext): Promise<IHandlerResponse> {
         if (!this.hasAccess(ctx)) {
-            return {
-                status: statusCodes.UNAUTHORIZED,
-                body: "Cannot access"
-            };
+            throw new UnauthorizedError();
         }
-        const findOptions = await this.buildFindOptions(ctx);
-        let qb = await this.buildSelectQueryBuilder(ctx, findOptions);
+        let qb = await this.buildSelectQueryBuilder(ctx);
         if (this.preDetail) {
             qb = await this.preDetail(ctx, qb);
         }
@@ -204,26 +199,13 @@ export default class BaseApiResource<Entity> {
      */
     public async postDetail(ctx: RequestContext) {
         if (!this.hasAccess(ctx)) {
-            return {
-                status: statusCodes.UNAUTHORIZED,
-                body: "Cannot access"
-            };
+            throw new UnauthorizedError();
         }
-        let item = new (this.model as any)(ctx.body);
-        const errors = await validate(item);
-        if (errors.length) {
-            if (this.logger) {
-                this.logger.error(
-                    `Error on POST ${ctx.path}  
-                    errors: \n ${errors}`
-                );
-            }
-            return {
-                body: errors.map(error => error.property).join("\n"),
-                status: statusCodes.BAD_REQUEST
-            };
-        }
-        item = await this.upgradeData(item);
+        const repo = this.getRepo();
+        const incoming_data = await this.prepareIncomingData(ctx.body);
+        let item = repo.metadata.create();
+        this.plainTransformer.transform(item, ctx.body as any, repo.metadata);
+        await this.check_valid(item);
         if (this.prePost) {
             item = await this.prePost(ctx, item);
         }
@@ -248,54 +230,34 @@ export default class BaseApiResource<Entity> {
      */
     public async patchDetail(ctx: RequestContext) {
         if (!this.hasAccess(ctx)) {
-            return {
-                status: statusCodes.UNAUTHORIZED,
-                body: "Cannot access"
-            };
+            throw new UnauthorizedError();
         }
-        let item: any = await this.getRepo().findOne(+ctx.params.id);
+        const incoming_data = await this.prepareIncomingData(ctx.body);
+        const repo = this.getRepo();
+        let item: any = await repo.findOne(+ctx.params.id);
         if (!item) {
-            return {
-                body: item,
-                status: statusCodes.NOT_FOUND
-            };
+            throw new NotFoundError();
         }
-
-        const clear_body = this.filterDataForPatch(ctx.body);
-        Object.assign(item, clear_body);
-
-        item = await this.upgradeData(item);
+        const clear_body = this.filterDataForPatch(incoming_data);
+        this.plainTransformer.transform(item, clear_body as any, repo.metadata);
         if (this.prePatch) {
             item = await this.prePatch(ctx, item);
         }
-        try {
-            const savedItem = await this.getRepo().save(item);
-            if (this.afterPatch) {
-                item = this.afterPatch(ctx, item);
-            }
-            return {
-                body: this.jsonSerialize(savedItem),
-                status: statusCodes.CREATED
-            };
-        } catch (error) {
-            if (this.logger) {
-                this.logger.error(error);
-            }
-            return {
-                body: "INTERNAL_SERVER_ERROR",
-                status: statusCodes.INTERNAL_SERVER_ERROR
-            };
+        const savedItem = await this.getRepo().save(item);
+        if (this.afterPatch) {
+            item = this.afterPatch(ctx, item);
         }
+        return {
+            body: this.jsonSerialize(savedItem),
+            status: statusCodes.CREATED
+        };
     }
     /**
      * Handler on DELETE "api/models/"
      */
     public async deleteDetail(ctx: RequestContext) {
         if (!this.hasAccess(ctx)) {
-            return {
-                status: statusCodes.UNAUTHORIZED,
-                body: "Cannot access"
-            };
+            throw new UnauthorizedError();
         }
         const deleted = await this.getRepo().delete(+ctx.params.id);
         if (this.afterDelete) {
@@ -343,11 +305,12 @@ export default class BaseApiResource<Entity> {
      */
 
     private async buildSelectQueryBuilder(
-        ctx: RequestContext,
-        fo: FindManyOptions<Entity>
+        ctx: RequestContext
     ): Promise<SelectQueryBuilder<Entity>> {
         let qb = this.getRepo().createQueryBuilder(this.model.name);
-        qb = FindOptionsUtils.applyOptionsToQueryBuilder(qb, fo);
+        qb = FindOptionsUtils.applyOptionsToQueryBuilder(qb, {
+            relations: this.relations || []
+        });
         // qb = this.applyRelations(qb);
         qb = await this.applyWhere(ctx, qb);
         qb = await this.applySkip(ctx, qb);
@@ -355,14 +318,33 @@ export default class BaseApiResource<Entity> {
         return qb;
     }
 
+    private isModificator(s: string | QueryKeyModificator) {
+        return QueryKeyModificatorsList.includes(s as QueryKeyModificator);
+    }
+
     private prepareQueryKey(key: string, value: IQueryKey["value"]): IQueryKey {
         const parts = key.split("__");
-        return {
+        // check last part on modificator
+        const qk: IQueryKey = {
             base: parts[0],
             modification: undefined,
-            path: parts.slice(1),
+            path: parts.slice(1).filter(i => !this.isModificator(i)),
             value
         };
+        if (
+            parts &&
+            parts.length &&
+            this.isModificator(parts[parts.length - 1])
+        ) {
+            qk.modification = parts[parts.length - 1] as QueryKeyModificator;
+        }
+        if (
+            ["in", "not_in"].includes(qk.modification as string) &&
+            isString(qk.value)
+        ) {
+            qk.value = qk.value.split(",");
+        }
+        return qk;
     }
 
     private getRepo(): Repository<Entity> {
@@ -385,8 +367,10 @@ export default class BaseApiResource<Entity> {
         qb: SelectQueryBuilder<Entity>
     ) {
         for (const skey in ctx.query) {
-            const val = ctx.query[skey];
-            const key = this.prepareQueryKey(skey, val);
+            const key = this.prepareQueryKey(skey, ctx.query[skey]);
+            if (SpecialQueryKeys.includes(key.base)) {
+                continue;
+            }
             if (this.isField(key)) {
                 // For relation
                 const isRel =
@@ -411,12 +395,51 @@ export default class BaseApiResource<Entity> {
                     continue;
                 }
                 // isSimple
+                let operator = "=";
+                let [wrapper_start, wrapper_end] = [":", ""];
+                switch (key.modification) {
+                    case "gt":
+                        operator = ">";
+                        break;
+                    case "gte":
+                        operator = ">=";
+                        break;
+                    case "lt":
+                        operator = "<";
+                        break;
+                    case "lte":
+                        operator = "<=";
+                        break;
+                    case "in":
+                        operator = "IN";
+                        wrapper_start = "(:...";
+                        wrapper_end = ")";
+                        if (!isArray(key.value)) {
+                            throw new InvalidQueryKey();
+                        }
+                        break;
+                    case "not_in":
+                        operator = "NOT IN";
+                        wrapper_start = "(:...";
+                        wrapper_end = ")";
+                        if (!isArray(key.value)) {
+                            throw new InvalidQueryKey();
+                        }
+                        break;
+                    case "not":
+                        operator = "!=";
+                        break;
+                }
                 qb = qb.andWhere(
-                    `${this.model.name}.${key.base}=:${key.base}`,
+                    `${this.model.name}.${
+                        key.base
+                    } ${operator} ${wrapper_start}${key.base}${wrapper_end}`,
                     {
-                        [key.base]: val
+                        [key.base]: key.value
                     }
                 );
+            } else {
+                throw new InvalidQueryKey();
             }
         }
         return qb;
@@ -448,80 +471,21 @@ export default class BaseApiResource<Entity> {
                 return [qb, join_attr];
             }
         }
-        console.log("JoidAttribute is not found");
         qb = qb.leftJoinAndSelect(property, propertyPath);
         return this.addOrGetRelation(qb, property, propertyPath);
     }
 
-    /**
-     * =====================
-     * FIND OPTIONS BUILDING
-     * =====================
-     */
-
-    // Parse request options
-    private async buildFindOptions(
-        ctx: RequestContext
-    ): Promise<FindManyOptions<Entity>> {
-        return {
-            order: this.buildOrder(ctx),
-            relations: this.buildRelations(ctx),
-            select: this.buildSelect(ctx)
-        };
-    }
-
-    private buildOrder(
-        ctx: RequestContext
-    ): IApiResourceOptions<Entity>["order"] {
-        // Multi value ordering
-        const ordered = !!ctx.query.order_by;
-        const order_by: string = ctx.query.order_by as string;
-        if (!ordered) {
-            return this.order;
+    private async check_valid(item: any) {
+        const errors = await validate(item);
+        if (errors.length) {
+            throw new Error(`Validate error; \n ${errors.join(";")}`);
         }
-        const [order, key] =
-            order_by[0] === "-"
-                ? ["DESC", order_by.slice(1)]
-                : ["ASC", order_by];
-        if (!has(new (this.model as any)(), key)) {
-            return {};
-        }
-
-        const result = key
-            ? {
-                  [key]: order as "DESC" | "ASC"
-              }
-            : {};
-        return result as IApiResourceOptions<Entity>["order"];
-    }
-    /**
-     * Return undefined if all field are selected
-     */
-    private buildSelect(ctx: RequestContext): Array<keyof Entity> | undefined {
-        if (!this.select) {
-            return;
-        }
-        const keys = ctx.query.select
-            ? (ctx.query.select as string).split(",")
-            : this.select.length
-                ? this.select
-                : undefined;
-        return keys as Array<keyof Entity>;
-    }
-    private buildRelations(ctx: RequestContext): string[] {
-        return this.relations || [];
     }
 
     /**
-     * =========================
-     * MODIFY DATA FROM USER TO RIGHT FORM
-     * =========================
+     * Convert incoming data to right form
      */
-
-    /**
-     * Convert data to right form
-     */
-    private async upgradeData(data: any) {
+    private async prepareIncomingData(data: any) {
         const repo = this.getRepo();
         if (typeof data !== "object") {
             return;
