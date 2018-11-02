@@ -42,11 +42,9 @@ export interface IApiResourceOptionsCallbacks<Entity> {
  */
 export interface IApiResourceOptions<T>
     extends IApiResourceOptionsCallbacks<T> {
-    detail_fields?: string[];
-    filter?: () => void;
     take?: number;
-    list_fields?: string[];
     relations?: string[];
-    select?: string[];
-    order?: { [P in keyof T]?: "DESC" | "ASC" };
+    select?: string[]; // TODO: implement this option
+    order?: { [P in keyof T]?: "DESC" | "ASC" }; // TODO: implement this option
+    additional_special_query_keys?: string[];
 }

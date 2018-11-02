@@ -5,9 +5,9 @@ export type ApiRequestType =
     | "POST_DETAIL"
     | "DELETE_DETAIL";
 
-export type RequestQuery = {
+export interface IRequestQuery {
     [key: string]: any;
-};
+}
 
 export class RequestContext {
     public body?: object | string;
@@ -19,7 +19,7 @@ export class RequestContext {
         // headers
         [key: string]: any;
     };
-    public query: RequestQuery;
+    public query: IRequestQuery;
     public request_type: ApiRequestType;
     public original_context?: any;
 

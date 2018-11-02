@@ -3,6 +3,7 @@ class TypeormRestfullError extends Error {
         super(message);
     }
 }
+export class BadRequestError extends TypeormRestfullError {}
 export class NotFoundError extends TypeormRestfullError {}
 export class UnauthorizedError extends TypeormRestfullError {}
 /*

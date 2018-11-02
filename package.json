@@ -1,11 +1,12 @@
 {
     "name": "typeorm-restfull",
-    "version": "0.0.16",
+    "version": "0.0.17",
     "description": "Adding restfull to your typeorm models",
     "repository": "https://github.com/VLZH/typeorm-restfull",
     "author": "VLZH",
     "license": "MIT",
     "main": "dist/index.js",
+    "types": "dist/index.d.js",
     "keywords": [
         "typeorm",
         "api",

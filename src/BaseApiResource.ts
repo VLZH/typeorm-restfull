@@ -1,7 +1,6 @@
 import { validate } from "class-validator";
 import statusCodes from "http-status-codes";
 import {
-    has,
     isArray,
     isFunction,
     isInteger,
@@ -12,7 +11,6 @@ import {
     pick
 } from "lodash";
 import {
-    FindManyOptions,
     getConnection,
     ObjectType,
     Repository,
@@ -28,6 +26,7 @@ import {
     IApiResourceOptionsCallbacks
 } from "./ApiResourceOptions";
 import {
+    BadRequestError,
     InvalidQueryKey,
     NotFoundError,
     UnauthorizedError
@@ -90,6 +89,7 @@ export default class BaseApiResource<Entity> {
     private take: number;
     private select?: string[];
     private order: IApiResourceOptions<Entity>["order"];
+    private additional_special_query_keys?: string[];
     //
     private plainTransformer: PlainObjectToNewEntityTransformer;
 
@@ -116,6 +116,8 @@ export default class BaseApiResource<Entity> {
         this.take = options.take || 10;
         this.select = options.select || undefined;
         this.order = options.order;
+        this.additional_special_query_keys =
+            options.additional_special_query_keys;
         //
         this.plainTransformer = new PlainObjectToNewEntityTransformer();
     }
@@ -231,6 +233,9 @@ export default class BaseApiResource<Entity> {
     public async patchDetail(ctx: RequestContext) {
         if (!this.hasAccess(ctx)) {
             throw new UnauthorizedError();
+        }
+        if (!ctx.params.id || !+ctx.params.id) {
+            throw new BadRequestError();
         }
         const incoming_data = await this.prepareIncomingData(ctx.body);
         const repo = this.getRepo();
@@ -368,7 +373,11 @@ export default class BaseApiResource<Entity> {
     ) {
         for (const skey in ctx.query) {
             const key = this.prepareQueryKey(skey, ctx.query[skey]);
-            if (SpecialQueryKeys.includes(key.base)) {
+            if (
+                SpecialQueryKeys.includes(key.base) ||
+                (this.additional_special_query_keys &&
+                    this.additional_special_query_keys.includes(key.base))
+            ) {
                 continue;
             }
             if (this.isField(key)) {
