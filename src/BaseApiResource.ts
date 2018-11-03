@@ -8,7 +8,8 @@ import {
     isObject,
     isString,
     omit,
-    pick
+    pick,
+    cloneDeep
 } from "lodash";
 import {
     getConnection,
@@ -178,6 +179,9 @@ export default class BaseApiResource<Entity> {
      * Handler on GET "api/models/:id"
      */
     public async getDetail(ctx: RequestContext): Promise<IHandlerResponse> {
+        if (!ctx.params.id || !+ctx.params.id) {
+            throw new BadRequestError();
+        }
         if (!this.hasAccess(ctx)) {
             throw new UnauthorizedError();
         }
@@ -200,13 +204,18 @@ export default class BaseApiResource<Entity> {
      * Handler on POST "api/models/"
      */
     public async postDetail(ctx: RequestContext) {
+        if (!isObject(ctx.body)) {
+            throw new BadRequestError();
+        }
         if (!this.hasAccess(ctx)) {
             throw new UnauthorizedError();
         }
         const repo = this.getRepo();
-        const incoming_data = await this.prepareIncomingData(ctx.body);
+        const incoming_data = await this.prepareIncomingData(
+            ctx.body as object
+        ); // TODO: What is this?
         let item = repo.metadata.create();
-        this.plainTransformer.transform(item, ctx.body as any, repo.metadata);
+        this.plainTransformer.transform(item, incoming_data, repo.metadata);
         await this.check_valid(item);
         if (this.prePost) {
             item = await this.prePost(ctx, item);
@@ -231,13 +240,15 @@ export default class BaseApiResource<Entity> {
      * Handler on PATCH "api/models/:id/"
      */
     public async patchDetail(ctx: RequestContext) {
+        if (!isObject(ctx.body) || !ctx.params.id || !+ctx.params.id) {
+            throw new BadRequestError();
+        }
         if (!this.hasAccess(ctx)) {
             throw new UnauthorizedError();
         }
-        if (!ctx.params.id || !+ctx.params.id) {
-            throw new BadRequestError();
-        }
-        const incoming_data = await this.prepareIncomingData(ctx.body);
+        const incoming_data = await this.prepareIncomingData(
+            ctx.body as object
+        );
         const repo = this.getRepo();
         let item: any = await repo.findOne(+ctx.params.id);
         if (!item) {
@@ -261,6 +272,9 @@ export default class BaseApiResource<Entity> {
      * Handler on DELETE "api/models/"
      */
     public async deleteDetail(ctx: RequestContext) {
+        if (!ctx.params.id || !+ctx.params.id) {
+            throw new BadRequestError();
+        }
         if (!this.hasAccess(ctx)) {
             throw new UnauthorizedError();
         }
@@ -494,36 +508,20 @@ export default class BaseApiResource<Entity> {
     /**
      * Convert incoming data to right form
      */
-    private async prepareIncomingData(data: any) {
+    private async prepareIncomingData(data: { [key: string]: any }) {
+        const result = cloneDeep(data);
         const repo = this.getRepo();
-        if (typeof data !== "object") {
-            return;
-        }
-
-        // set models instead itegers in ManyToMany
-        for (const key in data) {
-            if (data.hasOwnProperty(key)) {
-                const isManyToMany = this.isManyToMany(key);
-                if (!isManyToMany) {
-                    continue;
-                }
-                const value = data[key];
-                if (Array.isArray(value) && isNumber(value[0])) {
-                    // data[key] = isManyToMany.
-                }
-            }
-        }
 
         // some objects or number to right class
-        for (const key in data) {
-            if (data.hasOwnProperty(key)) {
+        for (const key in result) {
+            if (result.hasOwnProperty(key)) {
                 const isOneToMany = this.isOneToMany(key);
                 const isManyToOne = this.isManyToOne(key);
                 const isOneToOne = this.isOneToOne(key);
                 if (!isOneToMany && !isManyToOne && !isOneToOne) {
                     continue;
                 }
-                const value = data[key];
+                const value = result[key];
 
                 // is isOneToMany array of objects
                 if (
@@ -531,7 +529,7 @@ export default class BaseApiResource<Entity> {
                     isArray(value) &&
                     isFunction(isOneToMany.type)
                 ) {
-                    data[key] = data[key].map(
+                    result[key] = result[key].map(
                         (i: any) => new (isOneToMany.type as any)(i)
                     );
                 }
@@ -542,7 +540,7 @@ export default class BaseApiResource<Entity> {
                     isObject(value) &&
                     isFunction(isManyToOne.type)
                 ) {
-                    data[key] = new (isManyToOne.type as any)(value);
+                    result[key] = new (isManyToOne.type as any)(value);
                 }
 
                 // is isManyToOne integer
@@ -551,7 +549,7 @@ export default class BaseApiResource<Entity> {
                     isInteger(value) &&
                     isFunction(isManyToOne.type)
                 ) {
-                    data[key] = await getConnection()
+                    result[key] = await getConnection()
                         .getRepository(isManyToOne.type)
                         .findOne(value);
                 }
@@ -562,7 +560,7 @@ export default class BaseApiResource<Entity> {
                     isObject(value) &&
                     isFunction(isOneToOne.type)
                 ) {
-                    data[key] = new (isOneToOne.type as any)(value);
+                    result[key] = new (isOneToOne.type as any)(value);
                 }
             }
         }
@@ -574,16 +572,16 @@ export default class BaseApiResource<Entity> {
         ) {
             const parentPropertyName =
                 repo.metadata.treeParentRelation.propertyName;
-            if (data.hasOwnProperty(parentPropertyName)) {
+            if (result.hasOwnProperty(parentPropertyName)) {
                 const parent = await this.getRepo().findOne(
-                    data[parentPropertyName]
+                    result[parentPropertyName]
                 );
                 if (parent) {
-                    data[parentPropertyName] = parent;
+                    result[parentPropertyName] = parent;
                 }
             }
         }
-        return data;
+        return result;
     }
     /**
      * Check key in repo and return RelationMetadata of undefined
