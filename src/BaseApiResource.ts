@@ -1,6 +1,7 @@
 import { validate } from "class-validator";
 import statusCodes from "http-status-codes";
 import {
+    cloneDeep,
     isArray,
     isFunction,
     isInteger,
@@ -8,8 +9,7 @@ import {
     isObject,
     isString,
     omit,
-    pick,
-    cloneDeep
+    pick
 } from "lodash";
 import {
     getConnection,
