@@ -213,7 +213,7 @@ export default class BaseApiResource<Entity> {
         const repo = this.getRepo();
         const incoming_data = await this.prepareIncomingData(
             ctx.body as object
-        ); // TODO: What is this?
+        );
         let item = repo.metadata.create();
         this.plainTransformer.transform(item, incoming_data, repo.metadata);
         await this.check_valid(item);
@@ -518,10 +518,10 @@ export default class BaseApiResource<Entity> {
                 const isOneToMany = this.isOneToMany(key);
                 const isManyToOne = this.isManyToOne(key);
                 const isOneToOne = this.isOneToOne(key);
-                if (!isOneToMany && !isManyToOne && !isOneToOne) {
+                const value = result[key];
+                if ((!isOneToMany && !isManyToOne && !isOneToOne) || !value) {
                     continue;
                 }
-                const value = result[key];
 
                 // is isOneToMany array of objects
                 if (
@@ -572,7 +572,7 @@ export default class BaseApiResource<Entity> {
         ) {
             const parentPropertyName =
                 repo.metadata.treeParentRelation.propertyName;
-            if (result.hasOwnProperty(parentPropertyName)) {
+            if (result.hasOwnProperty(parentPropertyName) && result[parentPropertyName]) {
                 const parent = await this.getRepo().findOne(
                     result[parentPropertyName]
                 );
