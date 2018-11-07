@@ -4,6 +4,7 @@ class TypeormRestfullError extends Error {
     }
 }
 export class BadRequestError extends TypeormRestfullError {}
+export class BadMethodError extends BadRequestError {}
 export class NotFoundError extends TypeormRestfullError {}
 export class UnauthorizedError extends TypeormRestfullError {}
 /*

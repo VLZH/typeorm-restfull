@@ -5,7 +5,6 @@ import {
     isArray,
     isFunction,
     isInteger,
-    isNumber,
     isObject,
     isString,
     omit,
@@ -24,9 +23,11 @@ import ApiListResponse from "./ApiListResponse";
 import {
     IAccessCallback,
     IApiResourceOptions,
-    IApiResourceOptionsCallbacks
+    IApiResourceOptionsCallbacks,
+    RequestMethods
 } from "./ApiResourceOptions";
 import {
+    BadMethodError,
     BadRequestError,
     InvalidQueryKey,
     NotFoundError,
@@ -86,6 +87,7 @@ export default class BaseApiResource<Entity> {
     // access
     private hasAccess: IAccessCallback<Entity>;
     // options
+    private allowed_methods: RequestMethods[];
     private relations?: string[];
     private take: number;
     private select?: string[];
@@ -113,6 +115,12 @@ export default class BaseApiResource<Entity> {
         this.afterPost = options.afterPost;
         this.hasAccess = options.hasAccess || (() => true);
         //
+        this.allowed_methods = options.allowed_methods || [
+            "GET",
+            "POST",
+            "PATCH",
+            "DELETE"
+        ];
         this.relations = options.relations;
         this.take = options.take || 10;
         this.select = options.select || undefined;
@@ -150,6 +158,9 @@ export default class BaseApiResource<Entity> {
     public async getList(
         ctx: RequestContext
     ): Promise<IListHandlerResponse<Entity>> {
+        if (!this.allowed_methods.includes("GET")) {
+            throw new BadMethodError();
+        }
         if (!this.hasAccess(ctx)) {
             throw new UnauthorizedError();
         }
@@ -182,6 +193,9 @@ export default class BaseApiResource<Entity> {
         if (!ctx.params.id || !+ctx.params.id) {
             throw new BadRequestError();
         }
+        if (!this.allowed_methods.includes("GET")) {
+            throw new BadMethodError();
+        }
         if (!this.hasAccess(ctx)) {
             throw new UnauthorizedError();
         }
@@ -206,6 +220,9 @@ export default class BaseApiResource<Entity> {
     public async postDetail(ctx: RequestContext) {
         if (!isObject(ctx.body)) {
             throw new BadRequestError();
+        }
+        if (!this.allowed_methods.includes("POST")) {
+            throw new BadMethodError();
         }
         if (!this.hasAccess(ctx)) {
             throw new UnauthorizedError();
@@ -243,6 +260,9 @@ export default class BaseApiResource<Entity> {
         if (!isObject(ctx.body) || !ctx.params.id || !+ctx.params.id) {
             throw new BadRequestError();
         }
+        if (!this.allowed_methods.includes("PATCH")) {
+            throw new BadMethodError();
+        }
         if (!this.hasAccess(ctx)) {
             throw new UnauthorizedError();
         }
@@ -275,6 +295,9 @@ export default class BaseApiResource<Entity> {
         if (!ctx.params.id || !+ctx.params.id) {
             throw new BadRequestError();
         }
+        if (!this.allowed_methods.includes("DELETE")) {
+            throw new BadMethodError();
+        }
         if (!this.hasAccess(ctx)) {
             throw new UnauthorizedError();
         }
@@ -287,6 +310,7 @@ export default class BaseApiResource<Entity> {
             status: statusCodes.NO_CONTENT
         };
     }
+
     /**
      * Ignore read-only fields
      */
@@ -572,7 +596,10 @@ export default class BaseApiResource<Entity> {
         ) {
             const parentPropertyName =
                 repo.metadata.treeParentRelation.propertyName;
-            if (result.hasOwnProperty(parentPropertyName) && result[parentPropertyName]) {
+            if (
+                result.hasOwnProperty(parentPropertyName) &&
+                result[parentPropertyName]
+            ) {
                 const parent = await this.getRepo().findOne(
                     result[parentPropertyName]
                 );

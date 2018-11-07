@@ -1,6 +1,8 @@
 import { DeleteResult, SelectQueryBuilder } from "typeorm";
 import RequestContext, { ApiRequestType } from "./RequestContext";
 
+export type RequestMethods = "GET" | "POST" | "PATCH" | "DELETE";
+
 export type IPreInsertCallback<Entity> = (
     ctx: RequestContext,
     data: Entity
@@ -42,6 +44,7 @@ export interface IApiResourceOptionsCallbacks<Entity> {
  */
 export interface IApiResourceOptions<T>
     extends IApiResourceOptionsCallbacks<T> {
+    allowed_methods?: RequestMethods[];
     take?: number;
     relations?: string[];
     select?: string[]; // TODO: implement this option
