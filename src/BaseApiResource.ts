@@ -425,72 +425,110 @@ export default class BaseApiResource<Entity> {
                     this.isManyToOne(key) ||
                     this.isOneToOne(key) ||
                     this.isManyToMany(key);
+                //
                 if (isRel) {
+                    // add where for relation
                     let join_attr;
+                    // TODO maybe, can i not use this line?
                     const property = `${qb.alias}.${isRel.propertyPath}`;
                     [qb, join_attr] = this.addOrGetRelation(
                         qb,
                         property,
                         isRel.propertyPath
                     );
-                    qb.andWhere(
-                        `${join_attr.alias.name}.${key.path[0]} = :${
-                            key.path[0]
-                        }`,
-                        { [key.path[0]]: key.value }
+                    qb = this.addWhere(
+                        key,
+                        qb,
+                        join_attr.alias.name,
+                        key.path[0],
+                        key.value
                     );
-                    continue;
+                } else {
+                    // add where for simple value
+                    qb = this.addWhere(
+                        key,
+                        qb,
+                        this.model.name,
+                        key.base,
+                        key.value
+                    );
                 }
-                // isSimple
-                let operator = "=";
-                let [wrapper_start, wrapper_end] = [":", ""];
-                switch (key.modification) {
-                    case "gt":
-                        operator = ">";
-                        break;
-                    case "gte":
-                        operator = ">=";
-                        break;
-                    case "lt":
-                        operator = "<";
-                        break;
-                    case "lte":
-                        operator = "<=";
-                        break;
-                    case "in":
-                        operator = "IN";
-                        wrapper_start = "(:...";
-                        wrapper_end = ")";
-                        if (!isArray(key.value)) {
-                            throw new InvalidQueryKey();
-                        }
-                        break;
-                    case "not_in":
-                        operator = "NOT IN";
-                        wrapper_start = "(:...";
-                        wrapper_end = ")";
-                        if (!isArray(key.value)) {
-                            throw new InvalidQueryKey();
-                        }
-                        break;
-                    case "not":
-                        operator = "!=";
-                        break;
-                }
-                qb = qb.andWhere(
-                    `${this.model.name}.${
-                        key.base
-                    } ${operator} ${wrapper_start}${key.base}${wrapper_end}`,
-                    {
-                        [key.base]: key.value
-                    }
-                );
             } else {
                 throw new InvalidQueryKey();
             }
         }
         return qb;
     }
+
+    /**
+     * 
+     * @param key 
+     * @param qb 
+     * @param alias 
+     * @param field 
+     * @param value 
+     */
+    private addWhere(
+        key: IQueryKey,
+        qb: SelectQueryBuilder<Entity>,
+        alias: string,
+        field: string,
+        value: IQueryKey["value"]
+    ) {
+        // Use IN if value is Array
+        // TODO: Think about this...
+        if (isArray(value)) {
+            key.modification = "in";
+        }
+        let operator = "=";
+        let [wrapper_start, wrapper_end] = [":", ""];
+        switch (key.modification) {
+            case "gt":
+                operator = ">";
+                break;
+            case "gte":
+                operator = ">=";
+                break;
+            case "lt":
+                operator = "<";
+                break;
+            case "lte":
+                operator = "<=";
+                break;
+            case "in":
+                operator = "IN";
+                wrapper_start = "(:...";
+                wrapper_end = ")";
+                if (!isArray(key.value)) {
+                    throw new InvalidQueryKey();
+                }
+                break;
+            case "not_in":
+                operator = "NOT IN";
+                wrapper_start = "(:...";
+                wrapper_end = ")";
+                if (!isArray(key.value)) {
+                    throw new InvalidQueryKey();
+                }
+                break;
+            case "not":
+                operator = "!=";
+                break;
+        }
+        // create function for adding value to
+        const applyToQb = (
+            qb: SelectQueryBuilder<Entity>,
+            v: IQueryKey["value"]
+        ) =>
+            qb.andWhere(
+                `${alias}.${field} ${operator} ${wrapper_start}${field}${wrapper_end}`,
+                {
+                    [field]: v
+                }
+            );
+        return applyToQb(qb, value);
+    }
+
     /* tslint:enable */
 
     private async applySkip(
@@ -508,6 +546,12 @@ export default class BaseApiResource<Entity> {
         return qb.take(limit);
     }
 
+    /**
+     * TODO: write description!
+     * @param qb
+     * @param property_path path in the parent object
+     * @param alias alias for using in another operations over QueryBuilder
+     */
     private addOrGetRelation(
         qb: SelectQueryBuilder<Entity>,
         property: string,

@@ -44,7 +44,7 @@
     },
     "scripts": {
         "build": "tsc --declaration",
-        "watch": "tsc --watch --declaration",
+        "build:dev": "tsc --watch --declaration",
         "pub": "tsc --declaration && ./node_modules/yarn/bin/yarn publish",
         "test": "jest"
     },
