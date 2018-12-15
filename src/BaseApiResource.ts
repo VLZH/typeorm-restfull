@@ -312,7 +312,7 @@ export default class BaseApiResource<Entity> {
     }
 
     /**
-     * Create SelectQueryBuilder for getting entity for detail query
+     * Create SelectQueryBuilder for getting entity for detail request
      */
     public async buildSelectDetailQueryBuilder(
         ctx: RequestContext
