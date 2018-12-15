@@ -44,6 +44,7 @@ export interface IApiResourceOptionsCallbacks<Entity> {
  */
 export interface IApiResourceOptions<T>
     extends IApiResourceOptionsCallbacks<T> {
+    primary_keys?: string[]; // Fileds for searching items when used query like /resource_name/item_identifier/
     allowed_methods?: RequestMethods[];
     take?: number;
     relations?: string[];

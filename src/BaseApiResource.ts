@@ -93,6 +93,7 @@ export default class BaseApiResource<Entity> {
     private select?: string[];
     private order: IApiResourceOptions<Entity>["order"];
     private additional_special_query_keys?: string[];
+    private primary_keys: string[];
     //
     private plainTransformer: PlainObjectToNewEntityTransformer;
 
@@ -121,6 +122,7 @@ export default class BaseApiResource<Entity> {
             "PATCH",
             "DELETE"
         ];
+        this.primary_keys = options.primary_keys || ["id"];
         this.relations = options.relations;
         this.take = options.take || 10;
         this.select = options.select || undefined;
@@ -190,7 +192,7 @@ export default class BaseApiResource<Entity> {
      * Handler on GET "api/models/:id"
      */
     public async getDetail(ctx: RequestContext): Promise<IHandlerResponse> {
-        if (!ctx.params.id || !+ctx.params.id) {
+        if (!ctx.params.id) {
             throw new BadRequestError();
         }
         if (!this.allowed_methods.includes("GET")) {
@@ -199,13 +201,11 @@ export default class BaseApiResource<Entity> {
         if (!this.hasAccess(ctx)) {
             throw new UnauthorizedError();
         }
-        let qb = await this.buildSelectQueryBuilder(ctx);
+        let qb = await this.buildSelectDetailQueryBuilder(ctx);
         if (this.preDetail) {
             qb = await this.preDetail(ctx, qb);
         }
-        let item = await qb
-            .where(`${qb.alias}.id = :id`, { id: +ctx.params.id })
-            .getOne();
+        let item = await qb.getOne();
         if (this.afterDetail && item) {
             item = await this.afterDetail(ctx, item);
         }
@@ -309,6 +309,31 @@ export default class BaseApiResource<Entity> {
             body: "",
             status: statusCodes.NO_CONTENT
         };
+    }
+
+    /**
+     * Create SelectQueryBuilder for getting entity for detail query
+     */
+    public async buildSelectDetailQueryBuilder(
+        ctx: RequestContext
+    ): Promise<SelectQueryBuilder<Entity>> {
+        let qb = await this.buildSelectQueryBuilder(ctx);
+        const param = +ctx.params.id || ctx.params.id;
+        for (const [k, v] of Object.entries(this.primary_keys)) {
+            if (isString(param) && this.isNumber(v)) {
+                continue;
+            }
+            if (k === "0") {
+                qb = qb.where(`${qb.alias}.${v} = :${v}`, {
+                    [v]: param
+                });
+            } else {
+                qb = qb.orWhere(`${qb.alias}.${v} = :${v}`, {
+                    [v]: param
+                });
+            }
+        }
+        return qb;
     }
 
     /**
@@ -461,12 +486,7 @@ export default class BaseApiResource<Entity> {
     }
 
     /**
-     * 
-     * @param key 
-     * @param qb 
-     * @param alias 
-     * @param field 
-     * @param value 
+     * Add filters to SelectQueryBuilder
      */
     private addWhere(
         key: IQueryKey,
@@ -654,6 +674,7 @@ export default class BaseApiResource<Entity> {
         }
         return result;
     }
+
     /**
      * Check key in repo and return RelationMetadata of undefined
      */
@@ -704,6 +725,15 @@ export default class BaseApiResource<Entity> {
         for (const field of repo.metadata.ownRelations) {
             if (field.propertyName === (isString(key) ? key : key.base)) {
                 return field;
+            }
+        }
+    }
+
+    private isNumber(key: string | IQueryKey): boolean | undefined {
+        const repo = this.getRepo();
+        for (const field of repo.metadata.ownColumns) {
+            if (field.propertyName === (isString(key) ? key : key.base)) {
+                return field.type === Number;
             }
         }
     }
