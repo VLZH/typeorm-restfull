@@ -12,10 +12,12 @@ import {
 } from "lodash";
 import {
     getConnection,
+    getConnectionOptions,
     ObjectType,
     Repository,
     SelectQueryBuilder as SQB
 } from "typeorm";
+import { QueryFailedError as TypeormQueryFailedError } from "typeorm/error/QueryFailedError";
 import { FindOptionsUtils } from "typeorm/find-options/FindOptionsUtils";
 import { JoinAttribute } from "typeorm/query-builder/JoinAttribute";
 import { PlainObjectToNewEntityTransformer } from "typeorm/query-builder/transformer/PlainObjectToNewEntityTransformer";
@@ -29,6 +31,7 @@ import {
 import {
     BadMethodError,
     BadRequestError,
+    ConstraintError,
     InvalidQueryKey,
     NotFoundError,
     UnauthorizedError
@@ -233,17 +236,17 @@ export default class BaseApiResource<Entity> {
         );
         let item = repo.metadata.create();
         this.plainTransformer.transform(item, incoming_data, repo.metadata);
-        await this.check_valid(item);
+        await this.checkValid(item);
         if (this.prePost) {
             item = await this.prePost(ctx, item);
         }
         try {
             item = await this.getRepo().save(item);
         } catch (error) {
-            if (this.logger) {
-                this.logger.error(error);
+            if (error instanceof TypeormQueryFailedError) {
+                throw new ConstraintError((error as any).detail);
             }
-            throw new Error("Error in creating new ");
+            throw error;
         }
         if (this.afterPost) {
             item = await this.afterPost(ctx, item);
@@ -279,12 +282,19 @@ export default class BaseApiResource<Entity> {
         if (this.prePatch) {
             item = await this.prePatch(ctx, item);
         }
-        const savedItem = await this.getRepo().save(item);
+        try {
+            item = await this.getRepo().save(item);
+        } catch (error) {
+            if (error instanceof TypeormQueryFailedError) {
+                throw new ConstraintError((error as any).detail);
+            }
+            throw error;
+        }
         if (this.afterPatch) {
             item = this.afterPatch(ctx, item);
         }
         return {
-            body: this.jsonSerialize(savedItem),
+            body: this.jsonSerialize(item),
             status: statusCodes.CREATED
         };
     }
@@ -360,9 +370,8 @@ export default class BaseApiResource<Entity> {
      * Conver some data to JSON
      */
     private jsonSerialize(data: any) {
-        return JSON.stringify(
-            data,
-            (key, value) => (value === undefined ? null : value)
+        return JSON.stringify(data, (key, value) =>
+            value === undefined ? null : value
         );
     }
 
@@ -376,6 +385,7 @@ export default class BaseApiResource<Entity> {
         ctx: RequestContext
     ): Promise<SelectQueryBuilder<Entity>> {
         let qb = this.getRepo().createQueryBuilder(this.model.name);
+        // apply option(for ropo) to QueryBuilder
         qb = FindOptionsUtils.applyOptionsToQueryBuilder(qb, {
             relations: this.relations || []
         });
@@ -408,7 +418,8 @@ export default class BaseApiResource<Entity> {
         }
         if (
             ["in", "not_in"].includes(qk.modification as string) &&
-            isString(qk.value)
+            isString(qk.value) &&
+            qk.value.length
         ) {
             qk.value = qk.value.split(",");
         }
@@ -441,6 +452,9 @@ export default class BaseApiResource<Entity> {
                 (this.additional_special_query_keys &&
                     this.additional_special_query_keys.includes(key.base))
             ) {
+                continue;
+            }
+            if (!key.value) {
                 continue;
             }
             if (this.isField(key)) {
@@ -534,6 +548,9 @@ export default class BaseApiResource<Entity> {
             case "not":
                 operator = "!=";
                 break;
+            case "count_gt":
+                operator = "!=";
+                break;
         }
         // create function for adding value to
         const applyToQb = (
@@ -586,7 +603,7 @@ export default class BaseApiResource<Entity> {
         return this.addOrGetRelation(qb, property, propertyPath);
     }
 
-    private async check_valid(item: any) {
+    private async checkValid(item: any) {
         const errors = await validate(item);
         if (errors.length) {
             throw new Error(`Validate error; \n ${errors.join(";")}`);
@@ -665,7 +682,7 @@ export default class BaseApiResource<Entity> {
                 result[parentPropertyName]
             ) {
                 const parent = await this.getRepo().findOne(
-                    result[parentPropertyName]
+                    result[parentPropertyName] as number // this assertions for preventing of error about types
                 );
                 if (parent) {
                     result[parentPropertyName] = parent;

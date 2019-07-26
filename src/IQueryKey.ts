@@ -6,7 +6,13 @@ export type QueryKeyModificator =
     | "lte"
     | "in"
     | "not_in"
-    | "not";
+    | "not"
+    | "count_eq"
+    | "count_gt"
+    | "count_gte"
+    | "count_lt"
+    | "count_lte";
+
 export const QueryKeyModificatorsList: QueryKeyModificator[] = [
     "gt",
     "gte",
@@ -14,8 +20,14 @@ export const QueryKeyModificatorsList: QueryKeyModificator[] = [
     "lte",
     "in",
     "not_in",
-    "not"
+    "not",
+    "count_eq",
+    "count_gt",
+    "count_gte",
+    "count_lt",
+    "count_lte"
 ];
+
 export const SpecialQueryKeys = ["limit", "offset", "order_by"];
 /**
  *

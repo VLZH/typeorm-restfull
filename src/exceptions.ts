@@ -7,6 +7,7 @@ export class BadRequestError extends TypeormRestfullError {}
 export class BadMethodError extends BadRequestError {}
 export class NotFoundError extends TypeormRestfullError {}
 export class UnauthorizedError extends TypeormRestfullError {}
+export class ConstraintError extends TypeormRestfullError {}
 /*
  * Error on try to send request with invalid filter query
  */
