@@ -1,6 +1,6 @@
 {
     "name": "typeorm-restfull",
-    "version": "0.0.17",
+    "version": " 0.0.18",
     "description": "Adding restfull to your typeorm models",
     "repository": "https://github.com/VLZH/typeorm-restfull",
     "author": "VLZH",
@@ -45,7 +45,7 @@
     "scripts": {
         "build": "tsc --declaration",
         "build:dev": "tsc --watch --declaration",
-        "pub": "tsc --declaration && ./node_modules/yarn/bin/yarn publish",
+        "pub": "tsc --declaration && yarn publish",
         "test": "jest"
     },
     "jest": {
